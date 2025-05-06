@@ -14,12 +14,15 @@ interface StudentDao {
     @Delete
     suspend fun deleteStudent(student: Student)
 
-    @Query("SELECT * FROM students")
-    suspend fun getAllStudents(): List<Student>
-
     @Query("SELECT * FROM students WHERE id = :studentId")
     suspend fun getStudentById(studentId: Int): Student?
 
     @Query("SELECT * FROM students WHERE courseId = :courseId")
     suspend fun getStudentsByCourseId(courseId: Int): List<Student>
+
+    @Query("DELETE FROM students")
+    suspend fun clearAll()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(events: List<Student>)
 }

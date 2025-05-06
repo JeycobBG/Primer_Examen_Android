@@ -16,7 +16,7 @@ import androidx.room.PrimaryKey
     indices = [Index(value = ["courseId"])]
 )
 data class Student(
-    @PrimaryKey val id: Int,
+    @PrimaryKey val id: Int? = null,
     val name: String,
     val email: String,
     val phone: String,
