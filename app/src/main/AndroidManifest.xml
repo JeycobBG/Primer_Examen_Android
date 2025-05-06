@@ -12,6 +12,8 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Primer_Examen"
         tools:targetApi="31">
+        <activity android:name=".StudentDetailActivity" />
+        <activity android:name=".StudentsActivity" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
