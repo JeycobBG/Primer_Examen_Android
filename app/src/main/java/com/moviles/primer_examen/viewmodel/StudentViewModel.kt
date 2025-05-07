@@ -8,7 +8,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import com.moviles.primer_examen.model.AppDatabase
+import com.moviles.primer_examen.model.CreateStudentRequest
 import com.moviles.primer_examen.model.Student
+import com.moviles.primer_examen.model.StudentCourse
+import com.moviles.primer_examen.model.StudentWithCourses
 import com.moviles.primer_examen.network.RetrofitInstance
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody
@@ -19,8 +22,8 @@ class StudentViewModel(application: Application) : AndroidViewModel(application)
     private val db = AppDatabase.getInstance(application)
     private val studentDao = db.studentDao()
 
-    private val _students = MutableStateFlow<List<Student>>(emptyList())
-    val students: StateFlow<List<Student>> get() = _students
+    private val _students = MutableStateFlow<List<StudentWithCourses>>(emptyList()) // Cambiar a StudentWithCourses
+    val students: StateFlow<List<StudentWithCourses>> get() = _students
 
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> get() = _loading
@@ -33,23 +36,43 @@ class StudentViewModel(application: Application) : AndroidViewModel(application)
             _loading.value = true
             try {
                 val apiStudents = RetrofitInstance.api.getStudentsByCourse(courseId)
-                _students.value = apiStudents
 
-                // Actualizar Room
+                // Convertimos a entidades que Room entiende
+                val students = apiStudents.map {
+                    Student(
+                        id = it.id,
+                        name = it.name,
+                        email = it.email,
+                        phone = it.phone
+                    )
+                }
+
                 studentDao.clearAll()
-                studentDao.insertAll(apiStudents)
-                Log.d("ViewModel", "Estudiantes guardados en la base de datos: ${studentDao.getStudentsByCourseId(courseId)}")
 
+                val studentCourse = apiStudents.flatMap { student ->
+                    student.courses.map { course ->
+                        StudentCourse(studentId = student.id, courseId = course.id)
+                    }
+                }
+
+                studentDao.insertAllStudents(students)
+                studentDao.insertStudentCourseRelationship(studentCourse)
+
+                val studentsWithCourses = studentDao.getAllStudentsWithCourses()
+
+                // Actualizar el estado
+                _students.value = studentsWithCourses
+
+                Log.d("ViewModel", "Estudiantes guardados en la base de datos: $studentsWithCourses")
             } catch (e: Exception) {
                 Log.e("ViewModelError", "No se pudo conectar a la API: ${e.message}")
                 _error.value = "Sin conexión. Mostrando datos locales."
 
-                // Cargar desde Room usando courseId
-                val localStudents = studentDao.getStudentsByCourseId(courseId)
+                // Cargar datos locales desde Room
+                val localStudents = studentDao.getAllStudentsWithCourses()
                 if (localStudents.isNotEmpty()) {
                     _students.value = localStudents
                     Log.i("ViewModelInfo", "Datos cargados desde Room.")
-                    Log.d("RoomDebug", "Estudiantes recuperados de Room: ${_students.value}")
                 } else {
                     _students.value = emptyList()
                     Log.i("ViewModelInfo", "Room también está vacío.")
@@ -60,34 +83,35 @@ class StudentViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun addStudent(student: Student) {
+    fun addStudent(student: StudentWithCourses) {
         viewModelScope.launch {
             try {
-                // 1. Construcción de los datos del estudiante para el backend
-                val studentData: Map<String, RequestBody> = mutableMapOf<String, RequestBody>().apply {
-                    put("name", student.name.toRequestBody("text/plain".toMediaType()))
-                    put("email", student.email.toRequestBody("text/plain".toMediaType()))
-                    put("phone", student.phone.toRequestBody("text/plain".toMediaType()))
-                    put("courseId", student.courseId.toString().toRequestBody("text/plain".toMediaType()))
-                }
 
-                Log.i("ViewModelInfo", "Sending student data: ${student.name}")
+                val request = CreateStudentRequest(
+                    name = student.student.name,
+                    email = student.student.email,
+                    phone = student.student.phone,
+                    courseIds = student.courses.map { it.id }
+                )
 
-                // 2. Llamada al backend para agregar el estudiante
-                val response = RetrofitInstance.api.addStudent(studentData)
+                Log.i("ViewModelInfo", "Sending student data: ${student.student.name}")
 
-                // 3: Verificar el status de la respuesta
+                val response = RetrofitInstance.api.addStudent(request)
+
                 if (response.status == "success") {
-                    Log.i("ViewModelInfo", "Estudiante creado: ${response.student.name}")
+                    Log.i("ViewModelInfo", "Estudiante creado: ${response.student.student.name}")
 
-                    // 4: Guardar el nuevo estudiante en Room
-                    studentDao.insertAll(listOf(response.student))
+                    val studentCourseRelationships = response.student.courses.map { course ->
+                        StudentCourse(studentId = response.student.student.id!!, courseId = course.id)
+                    } ?: emptyList()
 
-                    // 5: Actualizar la lista observable de estudiantes (si es necesario)
+                    if (studentCourseRelationships.isNotEmpty()) {
+                        studentDao.insertStudentCourseRelationship(studentCourseRelationships)
+                    }
+
                     _students.value += response.student
 
                 } else {
-                    // Si el status no es "success", mostrar el mensaje de error
                     Log.e("ViewModelError", "Error al agregar estudiante: ${response.message}")
                 }
             } catch (e: HttpException) {
@@ -99,25 +123,41 @@ class StudentViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-
-    fun updateStudent(student: Student) {
+    fun updateStudent(studentWithCourses: StudentWithCourses) {
         viewModelScope.launch {
             try {
-                Log.i("ViewModelInfo", "Updating Student: $student")
+                Log.i("ViewModelInfo", "Updating Student: ${studentWithCourses.student}")
 
-                // Realizar la solicitud para actualizar el estudiante en el backend
-                val response = RetrofitInstance.api.updateStudent(student.id, student)
+                val studentData: Map<String, RequestBody> = mutableMapOf<String, RequestBody>().apply {
+                    put("name", studentWithCourses.student.name.toRequestBody("text/plain".toMediaType()))
+                    put("email", studentWithCourses.student.email.toRequestBody("text/plain".toMediaType()))
+                    put("phone", studentWithCourses.student.phone.toRequestBody("text/plain".toMediaType()))
 
-                // Comprobar si la respuesta fue exitosa
+                    val courseIds = studentWithCourses.courses.joinToString(",") { it.id.toString() }
+                    put("courseIds", courseIds.toRequestBody("text/plain".toMediaType()))
+                }
+
+                val response = RetrofitInstance.api.updateStudent(studentWithCourses.student.id, studentData)
+
                 if (response.status == "success") {
-                    // Actualizar la lista local de estudiantes
+                    Log.i("ViewModelInfo", "Updated Student: ${response.student.student}")
+
                     _students.value = _students.value.map { existingStudent ->
-                        if (existingStudent.id == response.student.id) response.student else existingStudent
+                        if (existingStudent.student.id == response.student.student.id) {
+                            response.student
+                        } else {
+                            existingStudent
+                        }
                     }
 
-                    // Actualizar el estudiante en Room (Base de datos local)
-                    studentDao.updateStudent(response.student)
-                    Log.i("ViewModelInfo", "Updated Student: ${response.student}")
+                    studentDao.updateStudent(response.student.student)
+
+                    studentDao.clearStudentCourses(response.student.student.id!!)
+
+                    val studentCourseRelationships = response.student.courses.map { course ->
+                        StudentCourse(studentId = response.student.student.id, courseId = course.id)
+                    }
+                    studentDao.insertStudentCourseRelationship(studentCourseRelationships)
 
                 } else {
                     Log.e("ViewModelError", "Failed to update student: ${response.message}")
@@ -131,8 +171,6 @@ class StudentViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-
-
     fun deleteStudent(studentId: Int?) {
         studentId?.let { id ->
             viewModelScope.launch {
@@ -140,24 +178,24 @@ class StudentViewModel(application: Application) : AndroidViewModel(application)
                     val response = RetrofitInstance.api.deleteStudent(id)
 
                     if (response.isSuccessful) {
-                        val updatedList = _students.value.filter { it.id != id }
-                        _students.value = updatedList
+                        studentDao.deleteStudentCoursesByStudentId(id)
 
-                        studentDao.clearAll()
-                        studentDao.insertAll(updatedList) // actualiza Room sin ese estudiante
+                        studentDao.deleteStudentById(id)
 
-                        Log.i("ViewModelInfo", "Estudiante eliminado correctamente")
+                        _students.value = _students.value.filter { it.student.id != id }
+
+                        Log.i("ViewModelInfo", "Estudiante eliminado correctamente de la API y la base de datos local")
                     } else {
                         val errorBody = response.errorBody()?.string()
                         Log.e("ViewModelError", "Error HTTP: ${response.code()}, Body: $errorBody")
                     }
-
                 } catch (e: Exception) {
                     Log.e("ViewModelError", "Error eliminando estudiante: ${e.message}")
                 }
             }
         } ?: Log.e("ViewModelError", "Error: studentId es null")
     }
+
 
     fun clearError() {
         _error.value = null

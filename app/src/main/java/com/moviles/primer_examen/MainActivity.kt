@@ -1,5 +1,6 @@
 package com.moviles.primer_examen
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -26,35 +27,14 @@ import com.moviles.primer_examen.ui.theme.Primer_ExamenTheme
  *
  */
 
-class MainActivity : ComponentActivity() {                            //Debe mostrar la Lista de cursos
+class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContent {
-            Primer_ExamenTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
-                    )
-                }
-            }
-        }
-    }
-}
 
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    Primer_ExamenTheme {
-        Greeting("Android")
+        // Redirigir a la actividad de estudiantes con courseId = 1
+        val intent = Intent(this, StudentsActivity::class.java)
+        intent.putExtra("courseId", 1)  // Establecer courseId = 1
+        startActivity(intent)
+        finish() // Cerrar MainActivity para evitar que se quede en la pila de actividades
     }
 }

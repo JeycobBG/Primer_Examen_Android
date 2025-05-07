@@ -1,6 +1,7 @@
 package com.moviles.primer_examen
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -46,6 +47,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.moviles.primer_examen.model.Student
+import com.moviles.primer_examen.model.StudentWithCourses
+import com.moviles.primer_examen.network.RetrofitInstance
 import com.moviles.primer_examen.ui.theme.Primer_ExamenTheme
 import com.moviles.primer_examen.viewmodel.StudentViewModel
 
@@ -70,17 +73,24 @@ import com.moviles.primer_examen.viewmodel.StudentViewModel
 class StudentsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
 
-        // Recuperar el courseId fuera de Compose
+        RetrofitInstance.init(applicationContext)
+
+        // Obtener el courseId desde el Intent
         val courseId = intent.getIntExtra("courseId", -1)
 
-        setContent {
-            Primer_ExamenTheme {
-                val viewModel: StudentViewModel = viewModel()
+        if (courseId != -1) {
+            setContent {
+                Primer_ExamenTheme {
+                    val viewModel: StudentViewModel = viewModel()
 
-                StudentScreen(viewModel, courseId)
+                    // Pasar courseId al Composable que maneja la vista
+                    StudentScreen(viewModel, courseId)
+                }
             }
+        } else {
+            // Manejar el caso en que no se pase un courseId válido
+            Log.e("StudentsActivity", "No se ha recibido un courseId válido.")
         }
     }
 }
@@ -93,7 +103,7 @@ fun StudentScreen(viewModel: StudentViewModel, courseId: Int) {
     val loading by viewModel.loading.collectAsState()  // Estado de carga
     val error by viewModel.error.collectAsState()  // Estado de error
     var showDialog by remember { mutableStateOf(false) }
-    var selectedStudent by remember { mutableStateOf<Student?>(null) }
+    var selectedStudent by remember { mutableStateOf<StudentWithCourses?>(null) }
 
     LaunchedEffect(courseId) {
         if (courseId != -1) {
@@ -118,17 +128,6 @@ fun StudentScreen(viewModel: StudentViewModel, courseId: Int) {
         }
     ) { paddingValues ->
         Column(modifier = Modifier.padding(paddingValues)) {
-            Button(
-                modifier = Modifier
-                    .padding(16.dp)
-                    .fillMaxWidth(),
-                onClick = { viewModel.fetchStudentsByCourse(courseId) }
-            ) {
-                Text("Refrescar Estudiantes")
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
             // Mostrar un indicador de carga si estamos esperando la respuesta
             if (loading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -141,18 +140,23 @@ fun StudentScreen(viewModel: StudentViewModel, courseId: Int) {
 
             if (!loading && students.isNotEmpty()) {
                 LazyColumn(modifier = Modifier.padding(16.dp)) {
-                    itemsIndexed(students) { index, student ->  // Usa itemsIndexed para obtener tanto el índice como el elemento
+                    itemsIndexed(students) { index, student ->
                         StudentItem(
                             student = student,
+                            courseId = courseId,
                             onEdit = {
                                 selectedStudent = it
                                 showDialog = true
                             },
                             onDelete = {
-                                viewModel.deleteStudent(it.id)
+                                viewModel.deleteStudent(student.student.id)  // Aquí pasamos el studentId
                             }
                         )
                     }
+                }
+            } else if (!loading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No hay estudiantes en este curso.", style = MaterialTheme.typography.bodyLarge)
                 }
             }
         }
@@ -164,16 +168,15 @@ fun StudentScreen(viewModel: StudentViewModel, courseId: Int) {
             courseId = courseId,
             onDismiss = { showDialog = false },
             onSave = { student ->
-                viewModel.updateStudent(student)
+                viewModel.addStudent(student)
                 showDialog = false
             }
         )
     }
 }
 
-
 @Composable
-fun StudentItem(student: Student, onEdit: (Student) -> Unit, onDelete: (Student) -> Unit) {
+fun StudentItem(student: StudentWithCourses, courseId: Int, onEdit: (StudentWithCourses) -> Unit, onDelete: (Int) -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -181,8 +184,8 @@ fun StudentItem(student: Student, onEdit: (Student) -> Unit, onDelete: (Student)
         elevation = CardDefaults.elevatedCardElevation(8.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(student.name, style = MaterialTheme.typography.titleLarge)
-            Text(student.email, style = MaterialTheme.typography.bodyMedium)
+            Text(student.student.name, style = MaterialTheme.typography.titleLarge)
+            Text(student.student.email, style = MaterialTheme.typography.bodyMedium)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -190,7 +193,12 @@ fun StudentItem(student: Student, onEdit: (Student) -> Unit, onDelete: (Student)
                 TextButton(onClick = { onEdit(student) }) {
                     Text("Editar", color = MaterialTheme.colorScheme.primary)
                 }
-                TextButton(onClick = { onDelete(student) }) {
+                // Verificamos que el ID no sea nulo antes de eliminar
+                TextButton(onClick = {
+                    student.student.id?.let {
+                        onDelete(it)  // Llamamos a onDelete solo si el id no es nulo
+                    }
+                }) {
                     Text("Eliminar", color = MaterialTheme.colorScheme.error)
                 }
             }
@@ -200,30 +208,34 @@ fun StudentItem(student: Student, onEdit: (Student) -> Unit, onDelete: (Student)
 
 @Composable
 fun StudentDialog(
-    student: Student?,
+    student: StudentWithCourses?,  // StudentWithCourses en lugar de solo Student
     courseId: Int,
     onDismiss: () -> Unit,
-    onSave: (Student) -> Unit
+    onSave: (StudentWithCourses) -> Unit
 ) {
-    var name by remember { mutableStateOf(student?.name ?: "") }
-    var email by remember { mutableStateOf(student?.email ?: "") }
-    var phone by remember { mutableStateOf(student?.phone ?: "") }
+    // Inicializamos los campos del estudiante
+    var name by remember { mutableStateOf(student?.student?.name ?: "") }
+    var email by remember { mutableStateOf(student?.student?.email ?: "") }
+    var phone by remember { mutableStateOf(student?.student?.phone ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (student == null) "Agregar Estudiante" else "Editar Estudiante") },
         text = {
             Column {
+                // Campo para el nombre
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("Nombre") }
                 )
+                // Campo para el correo
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it },
                     label = { Text("Correo Electrónico") }
                 )
+                // Campo para el teléfono
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it },
@@ -233,13 +245,20 @@ fun StudentDialog(
         },
         confirmButton = {
             Button(onClick = {
+                val updatedStudent = Student(
+                    id = student?.student?.id,  // Si student es null, el id será null, sino tomamos el id existente
+                    name = name,
+                    email = email,
+                    phone = phone
+                )
+
+                // Llamamos a onSave con el estudiante actualizado
+                // Si estamos editando, pasamos la misma lista de cursos que tenía el estudiante
+                // Si estamos creando uno nuevo, pasamos una lista vacía de cursos (o puedes manejarlo según tu lógica)
                 onSave(
-                    Student(
-                        id = student?.id,
-                        name = name,
-                        email = email,
-                        phone = phone,
-                        courseId = courseId
+                    StudentWithCourses(
+                        student = updatedStudent,
+                        courses = student?.courses?.filter { it.id == courseId } ?: emptyList()  // Filtramos los cursos para que solo se asocien los cursos relacionados con el courseId
                     )
                 )
             }) {
@@ -253,7 +272,6 @@ fun StudentDialog(
         }
     )
 }
-
 
 @Composable
 fun ConnectionStatusMessage(error: String?) {

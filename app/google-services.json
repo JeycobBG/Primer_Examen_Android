@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "743312635405",
+    "project_id": "primer-examen-moviles",
+    "storage_bucket": "primer-examen-moviles.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:743312635405:android:7f63f72fd6bc52db7b0744",
+        "android_client_info": {
+          "package_name": "com.moviles.primer_examen"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDcgdBJAkE-k7vBM9xHYzvPApPvTZmBZJI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
