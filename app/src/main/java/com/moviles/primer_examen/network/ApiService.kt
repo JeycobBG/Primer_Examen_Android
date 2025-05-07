@@ -1,8 +1,7 @@
 package com.moviles.primer_examen.network
 
-import com.moviles.primer_examen.model.CreateStudentRequest
-import com.moviles.primer_examen.model.StudentApiDto
-import com.moviles.primer_examen.model.StudentWithCourses
+import StudentWithCourse
+import com.moviles.primer_examen.model.Student
 import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.*
@@ -10,27 +9,24 @@ import retrofit2.http.*
 interface ApiService {
 
     @GET("api/Student/{id}")
-    suspend fun getStudentById(@Path("id") id: Int): StudentWithCourses
+    suspend fun getStudentById(@Path("id") id: Int): Student
 
-    @GET("api/Student")  // Cambié de "students" a "Student"
-    suspend fun getStudentsByCourse(@Query("courseId") courseId: Int): List<StudentApiDto>
+    @GET("api/Student")
+    suspend fun getStudentsByCourse(@Query("courseId") courseId: Int): List<Student>
 
     @POST("api/Student")
-    suspend fun addStudent(@Body student: CreateStudentRequest): ApiResponseStudent
+    suspend fun addStudent(@Body student: Student): ApiResponseStudent
 
     @PUT("api/Student/{id}")
     suspend fun updateStudent(
-        @Path("id") id: Int?,
-        @Body studentData: Map<String, RequestBody>
-    ): ApiResponseStudent
+        @Path("id") id: Int?, @Body student: Student): ApiResponseStudent
 
     @DELETE("api/Student/{id}")
     suspend fun deleteStudent(@Path("id") id: Int?): Response<Unit>
 }
 
-// Respuesta para agregar o actualizar un estudiante
 data class ApiResponseStudent(
     val status: String,
     val message: String,
-    val student: StudentWithCourses
+    val student: Student
 )

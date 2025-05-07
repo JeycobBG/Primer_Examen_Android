@@ -1,19 +1,20 @@
 package com.moviles.primer_examen
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -46,8 +47,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.google.firebase.messaging.FirebaseMessaging
 import com.moviles.primer_examen.model.Student
-import com.moviles.primer_examen.model.StudentWithCourses
 import com.moviles.primer_examen.network.RetrofitInstance
 import com.moviles.primer_examen.ui.theme.Primer_ExamenTheme
 import com.moviles.primer_examen.viewmodel.StudentViewModel
@@ -74,7 +75,9 @@ class StudentsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        createNotificationChannel(this)
         RetrofitInstance.init(applicationContext)
+        subscribeToTopic()
 
         // Obtener el courseId desde el Intent
         val courseId = intent.getIntExtra("courseId", -1)
@@ -95,7 +98,6 @@ class StudentsActivity : ComponentActivity() {
     }
 }
 
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StudentScreen(viewModel: StudentViewModel, courseId: Int) {
@@ -103,11 +105,16 @@ fun StudentScreen(viewModel: StudentViewModel, courseId: Int) {
     val loading by viewModel.loading.collectAsState()  // Estado de carga
     val error by viewModel.error.collectAsState()  // Estado de error
     var showDialog by remember { mutableStateOf(false) }
-    var selectedStudent by remember { mutableStateOf<StudentWithCourses?>(null) }
+    var selectedStudent by remember { mutableStateOf<Student?>(null) }
 
-    LaunchedEffect(courseId) {
+    LaunchedEffect(courseId, error) {
         if (courseId != -1) {
             viewModel.fetchStudentsByCourse(courseId)
+        }
+
+        if (error != null) {
+            kotlinx.coroutines.delay(3000)
+            viewModel.clearError()
         }
     }
 
@@ -127,6 +134,7 @@ fun StudentScreen(viewModel: StudentViewModel, courseId: Int) {
             }
         }
     ) { paddingValues ->
+
         Column(modifier = Modifier.padding(paddingValues)) {
             // Mostrar un indicador de carga si estamos esperando la respuesta
             if (loading) {
@@ -149,7 +157,7 @@ fun StudentScreen(viewModel: StudentViewModel, courseId: Int) {
                                 showDialog = true
                             },
                             onDelete = {
-                                viewModel.deleteStudent(student.student.id)  // Aquí pasamos el studentId
+                                viewModel.deleteStudent(student.id)  // Aquí pasamos el studentId
                             }
                         )
                     }
@@ -160,6 +168,8 @@ fun StudentScreen(viewModel: StudentViewModel, courseId: Int) {
                 }
             }
         }
+        // 🔻 Mostrar el mensaje de conexión siempre que haya error
+        ConnectionStatusMessage(error = error)
     }
 
     if (showDialog) {
@@ -168,7 +178,11 @@ fun StudentScreen(viewModel: StudentViewModel, courseId: Int) {
             courseId = courseId,
             onDismiss = { showDialog = false },
             onSave = { student ->
-                viewModel.addStudent(student)
+                if (selectedStudent == null) {
+                    viewModel.addStudent(student)
+                } else {
+                    viewModel.updateStudent(student)
+                }
                 showDialog = false
             }
         )
@@ -176,7 +190,7 @@ fun StudentScreen(viewModel: StudentViewModel, courseId: Int) {
 }
 
 @Composable
-fun StudentItem(student: StudentWithCourses, courseId: Int, onEdit: (StudentWithCourses) -> Unit, onDelete: (Int) -> Unit) {
+fun StudentItem(student: Student, courseId: Int, onEdit: (Student) -> Unit, onDelete: (Int) -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -184,8 +198,8 @@ fun StudentItem(student: StudentWithCourses, courseId: Int, onEdit: (StudentWith
         elevation = CardDefaults.elevatedCardElevation(8.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(student.student.name, style = MaterialTheme.typography.titleLarge)
-            Text(student.student.email, style = MaterialTheme.typography.bodyMedium)
+            Text(student.name, style = MaterialTheme.typography.titleLarge)
+            Text(student.email, style = MaterialTheme.typography.bodyMedium)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -195,7 +209,7 @@ fun StudentItem(student: StudentWithCourses, courseId: Int, onEdit: (StudentWith
                 }
                 // Verificamos que el ID no sea nulo antes de eliminar
                 TextButton(onClick = {
-                    student.student.id?.let {
+                    student.id?.let {
                         onDelete(it)  // Llamamos a onDelete solo si el id no es nulo
                     }
                 }) {
@@ -208,15 +222,15 @@ fun StudentItem(student: StudentWithCourses, courseId: Int, onEdit: (StudentWith
 
 @Composable
 fun StudentDialog(
-    student: StudentWithCourses?,  // StudentWithCourses en lugar de solo Student
+    student: Student?,  // Ahora solo Student, ya no StudentWithCourses
     courseId: Int,
     onDismiss: () -> Unit,
-    onSave: (StudentWithCourses) -> Unit
+    onSave: (Student) -> Unit
 ) {
     // Inicializamos los campos del estudiante
-    var name by remember { mutableStateOf(student?.student?.name ?: "") }
-    var email by remember { mutableStateOf(student?.student?.email ?: "") }
-    var phone by remember { mutableStateOf(student?.student?.phone ?: "") }
+    var name by remember { mutableStateOf(student?.name ?: "") }
+    var email by remember { mutableStateOf(student?.email ?: "") }
+    var phone by remember { mutableStateOf(student?.phone ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -246,21 +260,13 @@ fun StudentDialog(
         confirmButton = {
             Button(onClick = {
                 val updatedStudent = Student(
-                    id = student?.student?.id,  // Si student es null, el id será null, sino tomamos el id existente
+                    id = student?.id,  // Si student es null, el id será null, sino tomamos el id existente
                     name = name,
                     email = email,
-                    phone = phone
+                    phone = phone,
+                    courseId = courseId
                 )
-
-                // Llamamos a onSave con el estudiante actualizado
-                // Si estamos editando, pasamos la misma lista de cursos que tenía el estudiante
-                // Si estamos creando uno nuevo, pasamos una lista vacía de cursos (o puedes manejarlo según tu lógica)
-                onSave(
-                    StudentWithCourses(
-                        student = updatedStudent,
-                        courses = student?.courses?.filter { it.id == courseId } ?: emptyList()  // Filtramos los cursos para que solo se asocien los cursos relacionados con el courseId
-                    )
-                )
+                onSave(updatedStudent)
             }) {
                 Text("Guardar")
             }
@@ -292,4 +298,32 @@ fun ConnectionStatusMessage(error: String?) {
             )
         }
     }
+}
+
+
+fun createNotificationChannel(context: Context) {
+    if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O){
+        val channelId = "primer_examen_channel"
+        val channelName = "Primer Examen Reminders"
+        val importance = NotificationManager.IMPORTANCE_DEFAULT
+
+        val channel = NotificationChannel(channelId, channelName, importance).apply {
+            description = "Notifies users about recent updates"
+        }
+
+        val notificationManager =
+            context.getSystemService(NotificationManager::class.java)
+        notificationManager?.createNotificationChannel(channel)
+    }
+}
+
+fun subscribeToTopic() {
+    FirebaseMessaging.getInstance().subscribeToTopic("primer_examen")
+        .addOnCompleteListener { task ->
+            var msg = "Subscription successful"
+            if (!task.isSuccessful) {
+                msg = "Subscription failed"
+            }
+            Log.d("FCM", msg)
+        }
 }
