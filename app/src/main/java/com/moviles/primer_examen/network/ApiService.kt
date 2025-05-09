@@ -23,6 +23,19 @@ interface ApiService {
 
     @DELETE("api/Student/{id}")
     suspend fun deleteStudent(@Path("id") id: Int?): Response<Unit>
+
+      @GET("api/Course")
+    suspend fun getCourses(): List<Course>
+
+    @POST("api/Course")
+    suspend fun addCourse(@Body course: Course): Response<Course>
+
+    @PUT("api/Course/{id}")
+    suspend fun updateCourse(@Path("id") id: Int, @Body course: Course): Response<Course>
+
+    @DELETE("api/Course/{id}")
+    suspend fun deleteCourse(@Path("id") id: Int): Response<Unit>
+    
 }
 
 data class ApiResponseStudent(
