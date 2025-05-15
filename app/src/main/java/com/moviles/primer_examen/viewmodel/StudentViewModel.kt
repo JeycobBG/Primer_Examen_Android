@@ -1,5 +1,6 @@
 package com.moviles.primer_examen.viewmodel
 
+import StudentWithCourse
 import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
@@ -8,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import com.moviles.primer_examen.model.AppDatabase
+import com.moviles.primer_examen.model.Course
 import com.moviles.primer_examen.model.Student
 import com.moviles.primer_examen.network.RetrofitInstance
 import okhttp3.MediaType.Companion.toMediaType
@@ -18,6 +20,7 @@ import retrofit2.HttpException
 class StudentViewModel(application: Application) : AndroidViewModel(application) {
     private val db = AppDatabase.getInstance(application)
     private val studentDao = db.studentDao()
+    private val courseDao = db.courseDao()
 
     private val _students = MutableStateFlow<List<Student>>(emptyList()) // Cambiar a Student
     val students: StateFlow<List<Student>> get() = _students
@@ -27,6 +30,12 @@ class StudentViewModel(application: Application) : AndroidViewModel(application)
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> get() = _error
+
+    private val _selectedStudent = MutableStateFlow<Student?>(null)
+    val selectedStudent: StateFlow<Student?> get() = _selectedStudent
+
+    private val _studentWithCourse = MutableStateFlow<StudentWithCourse?>(null)
+    val studentWithCourse: StateFlow<StudentWithCourse?> = _studentWithCourse
 
     fun fetchStudentsByCourse(courseId: Int) {
         viewModelScope.launch {
@@ -143,6 +152,45 @@ class StudentViewModel(application: Application) : AndroidViewModel(application)
                 Log.e("ViewModelError", "Error HTTP: ${e.message()}, Response Body: $errorBody")
             } catch (e: Exception) {
                 Log.e("ViewModelError", "Error: ${e.message}", e)
+            }
+        }
+    }
+
+    fun fetchStudentById(studentId: Int) {
+        viewModelScope.launch {
+            _loading.value = true
+            try {
+                val apiStudent = RetrofitInstance.api.getStudentById(studentId) // StudentWithCourseDTO
+
+                // Decompose and map to Room entities
+                val student = Student(
+                    id = apiStudent.id,
+                    name = apiStudent.name,
+                    email = apiStudent.email,
+                    phone = apiStudent.phone,
+                    courseId = apiStudent.course.id
+                )
+
+                val course = Course(
+                    id = apiStudent.course.id,
+                    name = apiStudent.course.name,
+                    description = apiStudent.course.description,
+                    imageUrl = apiStudent.course.imageUrl ?: "",
+                    schedule = apiStudent.course.schedule ?: "",
+                    professor = apiStudent.course.professor ?: ""
+                )
+                // Save both in local DB
+                courseDao.insertCourse(course)
+                studentDao.insertStudent(student)
+
+            } catch (e: Exception) {
+                Log.e("ViewModelError", "No se pudo obtener el estudiante de la API: ${e.message}")
+                _error.value = "Sin conexión. Cargando datos locales."
+            } finally {
+                // Always load from local Room database
+                val localStudentWithCourse = studentDao.getStudentWithCourseById(studentId)
+                _studentWithCourse.value = localStudentWithCourse
+                _loading.value = false
             }
         }
     }

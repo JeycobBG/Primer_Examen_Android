@@ -47,6 +47,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.google.firebase.messaging.FirebaseMessaging
 import com.moviles.primer_examen.model.Student
 import com.moviles.primer_examen.network.RetrofitInstance
@@ -85,10 +89,18 @@ class StudentsActivity : ComponentActivity() {
         if (courseId != -1) {
             setContent {
                 Primer_ExamenTheme {
+                    val navController = rememberNavController()
                     val viewModel: StudentViewModel = viewModel()
 
-                    // Pasar courseId al Composable que maneja la vista
-                    StudentScreen(viewModel, courseId)
+                    NavHost(navController = navController, startDestination = "students") {
+                        composable("students") {
+                            StudentScreen(viewModel, courseId, navController)
+                        }
+                        composable("studentDetail/{studentId}") { backStackEntry ->
+                            val studentId = backStackEntry.arguments?.getString("studentId")?.toIntOrNull() ?: return@composable
+                            StudentDetailActivity(studentId = studentId, viewModel = viewModel)
+                        }
+                    }
                 }
             }
         } else {
@@ -100,7 +112,7 @@ class StudentsActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StudentScreen(viewModel: StudentViewModel, courseId: Int) {
+fun StudentScreen(viewModel: StudentViewModel, courseId: Int, navController: NavHostController) {
     val students by viewModel.students.collectAsState()
     val loading by viewModel.loading.collectAsState()  // Estado de carga
     val error by viewModel.error.collectAsState()  // Estado de error
@@ -148,10 +160,12 @@ fun StudentScreen(viewModel: StudentViewModel, courseId: Int) {
 
             if (!loading && students.isNotEmpty()) {
                 LazyColumn(modifier = Modifier.padding(16.dp)) {
-                    itemsIndexed(students) { index, student ->
+                    itemsIndexed(students) { _, student ->
                         StudentItem(
                             student = student,
-                            courseId = courseId,
+                            onClick = {
+                                navController.navigate("studentDetail/${student.id}")
+                            },
                             onEdit = {
                                 selectedStudent = it
                                 showDialog = true
@@ -168,8 +182,6 @@ fun StudentScreen(viewModel: StudentViewModel, courseId: Int) {
                 }
             }
         }
-        // 🔻 Mostrar el mensaje de conexión siempre que haya error
-        ConnectionStatusMessage(error = error)
     }
 
     if (showDialog) {
@@ -190,12 +202,13 @@ fun StudentScreen(viewModel: StudentViewModel, courseId: Int) {
 }
 
 @Composable
-fun StudentItem(student: Student, courseId: Int, onEdit: (Student) -> Unit, onDelete: (Int) -> Unit) {
+fun StudentItem(student: Student, onClick: () -> Unit, onEdit: (Student) -> Unit, onDelete: (Int) -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 8.dp),
-        elevation = CardDefaults.elevatedCardElevation(8.dp)
+        elevation = CardDefaults.elevatedCardElevation(8.dp),
+        onClick = {onClick()}
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(student.name, style = MaterialTheme.typography.titleLarge)

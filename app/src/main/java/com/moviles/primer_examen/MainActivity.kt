@@ -33,7 +33,7 @@ class MainActivity : ComponentActivity() {
 
         // Redirigir a la actividad de estudiantes con courseId = 1
         val intent = Intent(this, StudentsActivity::class.java)
-        intent.putExtra("courseId", 1)  // Establecer courseId = 1
+        intent.putExtra("courseId", 2)  // Establecer courseId = 1
         startActivity(intent)
         finish() // Cerrar MainActivity para evitar que se quede en la pila de actividades
     }

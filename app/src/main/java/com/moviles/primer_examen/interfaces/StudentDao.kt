@@ -1,5 +1,6 @@
 package com.moviles.primer_examen.interfaces
 
+import StudentWithCourse
 import androidx.room.*
 import com.moviles.primer_examen.model.Student
 
@@ -28,4 +29,8 @@ interface StudentDao {
 
     @Query("DELETE FROM students")
     suspend fun clearAll()
+
+    @Transaction
+    @Query("SELECT * FROM students WHERE id = :studentId LIMIT 1")
+    suspend fun getStudentWithCourseById(studentId: Int): StudentWithCourse
 }

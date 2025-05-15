@@ -2,6 +2,7 @@ package com.moviles.primer_examen.network
 
 import StudentWithCourse
 import com.moviles.primer_examen.model.Student
+import com.moviles.primer_examen.model.StudentWithCourseDTO
 import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.*
@@ -9,7 +10,7 @@ import retrofit2.http.*
 interface ApiService {
 
     @GET("api/Student/{id}")
-    suspend fun getStudentById(@Path("id") id: Int): Student
+    suspend fun getStudentById(@Path("id") id: Int): StudentWithCourseDTO
 
     @GET("api/Student")
     suspend fun getStudentsByCourse(@Query("courseId") courseId: Int): List<Student>

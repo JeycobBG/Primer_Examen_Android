@@ -91,4 +91,8 @@ dependencies {
     // Dependencias para local storage (Room)
     implementation(libs.androidx.room.runtime)
     ksp(libs.androidx.room.compiler)
+
+    // Dependencias para la navegación
+    implementation(libs.androidx.navigation.compose.v277)
+
 }
