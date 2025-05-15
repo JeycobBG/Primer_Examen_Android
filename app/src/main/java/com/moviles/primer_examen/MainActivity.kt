@@ -38,3 +38,121 @@ class MainActivity : ComponentActivity() {
         finish() // Cerrar MainActivity para evitar que se quede en la pila de actividades
     }
 }
+
+@Composable
+fun CourseScreen(viewModel: CourseViewModel) {
+    val courses by viewModel.courses.collectAsState()
+    val loading by viewModel.loading.collectAsState()
+    val error by viewModel.error.collectAsState()
+    var showDialog by remember { mutableStateOf(false) }
+    var selectedCourse by remember { mutableStateOf<Course?>(null) }
+
+    LaunchedEffect(Unit) {
+        viewModel.fetchCourses()
+    }
+
+    Scaffold(
+        topBar = { CenterAlignedTopAppBar(title = { Text("Courses") }) },
+        floatingActionButton = {
+            FloatingActionButton(onClick = { selectedCourse = null; showDialog = true }) {
+                Icon(Icons.Default.Add, contentDescription = "Add Course")
+            }
+        }
+    ) { paddingValues ->
+        Column(modifier = Modifier.padding(paddingValues)) {
+            if (loading) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+            }
+
+            if (error != null) {
+                Text(error!!, color = Color.Red, modifier = Modifier.padding(16.dp))
+            }
+
+            LazyColumn(modifier = Modifier.padding(16.dp)) {
+                items(courses) { course ->
+                    CourseItem(
+                        course = course,
+                        onEdit = { selectedCourse = it; showDialog = true },
+                        onDelete = { viewModel.deleteCourse(it.id) }
+                    )
+                }
+            }
+        }
+    }
+
+    if (showDialog) {
+        CourseDialog(
+            course = selectedCourse,
+            onDismiss = { showDialog = false },
+            onSave = { course ->
+                if (selectedCourse == null) {
+                    viewModel.addCourse(course)
+                } else {
+                    viewModel.updateCourse(course)
+                }
+                showDialog = false
+            }
+        )
+    }
+}@Composable
+fun CourseScreen(viewModel: CourseViewModel) {
+    val courses by viewModel.courses.collectAsState()
+    val loading by viewModel.loading.collectAsState()
+    val error by viewModel.error.collectAsState()
+    var showDialog by remember { mutableStateOf(false) }
+    var selectedCourse by remember { mutableStateOf<Course?>(null) }
+
+    LaunchedEffect(Unit) {
+        viewModel.fetchCourses()
+    }
+
+    Scaffold(
+        topBar = { CenterAlignedTopAppBar(title = { Text("Courses") }) },
+        floatingActionButton = {
+            FloatingActionButton(onClick = { selectedCourse = null; showDialog = true }) {
+                Icon(Icons.Default.Add, contentDescription = "Add Course")
+            }
+        }
+    ) { paddingValues ->
+        Column(modifier = Modifier.padding(paddingValues)) {
+            if (loading) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+            }
+
+            if (error != null) {
+                Text(error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
+            }
+
+            LazyColumn(modifier = Modifier.padding(16.dp)) {
+                items(courses) { course ->
+                    CourseItem(
+                        course = course,
+                        onEdit = { selectedCourse = it; showDialog = true },
+                        onDelete = { viewModel.deleteCourse(it.id) }
+                    )
+                }
+            }
+        }
+    }
+
+    if (showDialog) {
+        CourseDialog(
+            course = selectedCourse,
+            onDismiss = { showDialog = false },
+            onSave = { course ->
+                if (selectedCourse == null) {
+                    viewModel.addCourse(course)
+                } else {
+                    viewModel.updateCourse(course)
+                }
+                showDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+fun CourseItem(course: Course, onEdit: (Course) -> Unit, onDelete: (Course) -> Unit) {
+    // Implementación de cada ítem del curso (puedes personalizarlo)
+    Text(text = course.name)
+}
