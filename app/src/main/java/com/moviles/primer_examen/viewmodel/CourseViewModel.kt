@@ -55,20 +55,19 @@ class CourseViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun updateCourse(course: Course) {
-        viewModelScope.launch {
-            try {
-                val response = RetrofitInstance.api.updateCourse(course.id, course)
-                if (response.isSuccessful) {
-                    courseDao.updateCourse(response.body()!!)
-                    _courses.value = _courses.value.map {
-                        if (it.id == course.id) response.body()!! else it
-                    }
-                }
-            } catch (e: Exception) {
-                _error.value = "Error updating course."
+    viewModelScope.launch {
+        try {
+            val response = RetrofitInstance.api.updateCourse(course.id, course)
+            if (response.isSuccessful) {
+                courseDao.updateCourse(response.body()!!)
+                // Recarga la lista completa desde Room para asegurar sincronización
+                _courses.value = courseDao.getAllCourses()
             }
+        } catch (e: Exception) {
+            _error.value = "Error updating course."
         }
     }
+}
 
     fun deleteCourse(courseId: Int) {
         viewModelScope.launch {

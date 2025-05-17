@@ -1,6 +1,7 @@
 package com.moviles.primer_examen.network
 
 import StudentWithCourse
+import com.moviles.primer_examen.model.Course
 import com.moviles.primer_examen.model.Student
 import com.moviles.primer_examen.model.StudentWithCourseDTO
 import okhttp3.RequestBody
@@ -25,16 +26,16 @@ interface ApiService {
     @DELETE("api/Student/{id}")
     suspend fun deleteStudent(@Path("id") id: Int?): Response<Unit>
 
-      @GET("api/Course")
+      @GET("api/Courses")
     suspend fun getCourses(): List<Course>
 
-    @POST("api/Course")
+    @POST("api/Courses")
     suspend fun addCourse(@Body course: Course): Response<Course>
 
-    @PUT("api/Course/{id}")
+    @PUT("api/Courses/{id}")
     suspend fun updateCourse(@Path("id") id: Int, @Body course: Course): Response<Course>
 
-    @DELETE("api/Course/{id}")
+    @DELETE("api/Courses/{id}")
     suspend fun deleteCourse(@Path("id") id: Int): Response<Unit>
     
 }
